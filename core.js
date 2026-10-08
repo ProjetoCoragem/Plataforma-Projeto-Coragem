@@ -3137,12 +3137,7 @@ function usersPage() {
     }
 
 
-    const users =
-        cache.users
-            .filter(
-                user =>
-                    !isAdminUser(user)
-            );
+    const users = cache.users;
 
 
     root.innerHTML =
@@ -3706,6 +3701,8 @@ function userForm() {
 
             'tipo',
 
+            'role',
+
             'status',
 
             'escola',
@@ -4084,73 +4081,25 @@ function userForm() {
                PAYLOAD PARA EDGE FUNCTION
                ================================================= */
 
+            const selectedRole = v('role');
+
+            if (!['student', 'admin'].includes(selectedRole)) {
+                msg('Selecione um tipo de acesso válido.', 'error');
+                return;
+            }
+
             const payload = {
-
-                action:
-                    editing
-                        ? 'update'
-                        : 'create',
-
-                nome:
+                action: editing ? 'update' : 'create',
+                profile: {
+                    ...profileData,
+                    ...(editing ? { id: editing.id } : {}),
                     nome,
-
-                cpf:
                     cpf,
-
-                status:
-                    v('status') ||
-                    'Ativo',
-
-                role:
-                    'student',
-
-                /*
-                   Também enviamos tipo diretamente
-                   para manter compatibilidade com
-                   admin-users.
-                */
-
-                tipo:
-                    profileData.tipo,
-
-                data:
-                    profileData
-
+                    status: v('status') || 'Ativo',
+                    role: selectedRole
+                },
+                ...(password ? { password } : {})
             };
-
-
-            /*
-               ID só existe na edição.
-            */
-
-            if (editing) {
-
-                payload.id =
-                    editing.id;
-
-            }
-
-
-            /*
-               Só enviamos password
-               quando existe uma senha.
-            */
-
-            if (password) {
-
-                payload.password =
-                    password;
-
-                /*
-                   Compatibilidade caso a função
-                   ainda aceite "senha".
-                */
-
-                payload.senha =
-                    password;
-
-            }
-
 
             try {
 
