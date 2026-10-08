@@ -1,0 +1,20 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Novo Usuário | Projeto Coragem</title><link rel="stylesheet" href="styles.css"></head>
+<body data-role="admin" data-page="usuarios" data-title="Usuários"><div class="shell"><div id="shellSidebar"></div><div class="main"><div id="shellTopbar"></div><main class="content">
+<div class="page-head"><div><div class="kicker">Gestão de usuários</div><h2 id="formTitle">Novo usuário</h2><p>Cadastre dados pessoais, escolares e profissionais do participante.</p></div><a class="btn btn-secondary" href="usuarios.html">← Voltar</a></div><div id="message" class="message"></div>
+<form id="userForm" class="card form-card">
+<div class="form-section"><h3>Dados pessoais e acesso</h3><p>Campos essenciais para identificação e entrada na plataforma.</p></div>
+<div class="form-row"><div class="field"><label>Nome completo *</label><input id="nome" required></div><div class="field"><label>CPF *</label><input id="cpf" maxlength="14" required></div></div>
+<div class="form-row"><div class="field"><label>Data de nascimento</label><input id="nascimento" type="date"></div><div class="field"><label>Telefone</label><input id="telefone" maxlength="15"></div></div>
+<div class="form-row"><div class="field"><label>E-mail *</label><input id="email" type="email" required></div><div class="field"><label>Perfil *</label><select id="tipo" required><option>Jovem Aprendiz</option><option>Participante</option><option>Educador</option></select></div></div>
+<div class="form-row"><div class="field"><label>Status</label><select id="status"><option>Ativo</option><option>Inativo</option></select></div><div></div></div>
+<div class="form-row"><div class="field"><label>Senha *</label><input id="senha" type="password" minlength="6" required></div><div class="field"><label>Confirmar senha *</label><input id="confirmarSenha" type="password" minlength="6" required></div></div>
+<div class="form-section"><h3>Informações escolares</h3><p>Dados úteis para acompanhamento do jovem aprendiz.</p></div>
+<div class="form-row"><div class="field"><label>Escola</label><input id="escola"></div><div class="field"><label>Série/Ano</label><input id="serie" placeholder="Ex.: 2º ano do Ensino Médio"></div></div>
+<div class="form-row"><div class="field"><label>Período escolar</label><select id="periodoEscolar"><option value="">Selecione</option><option>Manhã</option><option>Tarde</option><option>Noite</option><option>Integral</option></select></div><div class="field"><label>Turma do Projeto Coragem</label><input id="turmaEscolar" placeholder="Ex.: Turma A"></div></div>
+<div class="form-section"><h3>Informações profissionais</h3></div>
+<div class="form-row"><div class="field"><label>Trabalha atualmente?</label><select id="trabalha"><option value="">Selecione</option><option>Sim</option><option>Não</option></select></div><div class="field"><label>Empresa</label><input id="empresa"></div></div>
+<div class="form-row"><div class="field"><label>Cargo/Função</label><input id="cargo" placeholder="Ex.: Jovem Aprendiz"></div><div class="field"><label>Horário de trabalho</label><input id="horarioTrabalho" placeholder="Ex.: 13:00 às 17:00"></div></div>
+<div class="form-row"><div class="field"><label>Data de admissão</label><input id="dataAdmissao" type="date"></div><div class="field"><label>Telefone da empresa</label><input id="telefoneEmpresa"></div></div>
+<div class="field"><label>Observações</label><textarea id="observacoes"></textarea></div>
+<div class="actions"><a class="btn btn-secondary" href="usuarios.html">Cancelar</a><button class="btn btn-primary" type="submit">Salvar usuário</button></div>
+</form></main></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="core.js"></script></body></html>

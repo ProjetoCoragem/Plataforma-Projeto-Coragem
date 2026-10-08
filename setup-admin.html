@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Instalação | Projeto Coragem</title>
+
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+
+    <main class="content" style="max-width: 760px;">
+
+        <div class="page-head">
+            <div>
+                <div class="kicker">Instalação única</div>
+
+                <h2>Criar primeiro administrador</h2>
+
+                <p>
+                    Use esta página somente na instalação inicial.
+                    Depois, remova-a da hospedagem e apague/desative
+                    a função bootstrap-admin.
+                </p>
+            </div>
+        </div>
+
+        <!-- Mensagens de sucesso ou erro -->
+        <div id="message" class="message"></div>
+
+
+        <!-- FORMULÁRIO -->
+        <form id="setup" class="card form-card">
+
+            <div class="field">
+                <label for="nome">Nome</label>
+
+                <input
+                    id="nome"
+                    type="text"
+                    required
+                    value="Administrador"
+                    autocomplete="name"
+                >
+            </div>
+
+
+            <div class="field">
+                <label for="cpf">CPF</label>
+
+                <input
+                    id="cpf"
+                    type="text"
+                    required
+                    maxlength="14"
+                    inputmode="numeric"
+                    autocomplete="off"
+                >
+            </div>
+
+
+            <div class="field">
+                <label for="senha">Senha</label>
+
+                <input
+                    id="senha"
+                    type="password"
+                    minlength="6"
+                    required
+                    autocomplete="new-password"
+                >
+            </div>
+
+
+            <div class="field">
+                <label for="secret">BOOTSTRAP_SECRET</label>
+
+                <input
+                    id="secret"
+                    type="password"
+                    required
+                    autocomplete="off"
+                >
+            </div>
+
+
+            <button
+                id="btnCriar"
+                class="btn btn-primary"
+                type="submit"
+            >
+                Criar administrador
+            </button>
+
+        </form>
+
+    </main>
+
+
+    <!-- Biblioteca oficial do Supabase -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+
+    <script>
+
+        /* =====================================================
+           CONFIGURAÇÃO DO SUPABASE
+           ===================================================== */
+
+        const SUPABASE_URL =
+            "https://npppfkantotzijnxxdaj.supabase.co";
+
+        const SUPABASE_PUBLISHABLE_KEY =
+            "sb_publishable_VUdqIbO7C4aDji_2asOXOQ_Qj5XGA42";
+
+
+        /* =====================================================
+           CRIAÇÃO DO CLIENTE
+           ===================================================== */
+
+        const sb = window.supabase.createClient(
+            SUPABASE_URL,
+            SUPABASE_PUBLISHABLE_KEY
+        );
+
+
+        /* =====================================================
+           ELEMENTOS DA PÁGINA
+           ===================================================== */
+
+        const formulario =
+            document.getElementById("setup");
+
+        const mensagem =
+            document.getElementById("message");
+
+        const botao =
+            document.getElementById("btnCriar");
+
+
+        /* =====================================================
+           MOSTRAR MENSAGEM
+           ===================================================== */
+
+        function mostrarMensagem(texto, erro = false) {
+
+            mensagem.textContent = texto;
+
+            mensagem.className =
+                "message " + (erro ? "error" : "success");
+        }
+
+
+        /* =====================================================
+           ENVIO DO FORMULÁRIO
+           ===================================================== */
+
+        formulario.addEventListener(
+            "submit",
+
+            async function (event) {
+
+                event.preventDefault();
+
+
+                /* ---------------------------------------------
+                   LIMPA MENSAGEM ANTERIOR
+                   --------------------------------------------- */
+
+                mensagem.textContent = "";
+                mensagem.className = "message";
+
+
+                /* ---------------------------------------------
+                   PEGA OS DADOS
+                   --------------------------------------------- */
+
+                const nome =
+                    document
+                        .getElementById("nome")
+                        .value
+                        .trim();
+
+
+                const cpf =
+                    document
+                        .getElementById("cpf")
+                        .value
+                        .replace(/\D/g, "");
+
+
+                const password =
+                    document
+                        .getElementById("senha")
+                        .value;
+
+
+                const secret =
+                    document
+                        .getElementById("secret")
+                        .value;
+
+
+                /* ---------------------------------------------
+                   VALIDAÇÕES
+                   --------------------------------------------- */
+
+                if (nome.length < 2) {
+
+                    mostrarMensagem(
+                        "Informe um nome válido.",
+                        true
+                    );
+
+                    return;
+                }
+
+
+                if (cpf.length !== 11) {
+
+                    mostrarMensagem(
+                        "O CPF precisa possuir 11 números.",
+                        true
+                    );
+
+                    return;
+                }
+
+
+                if (password.length < 6) {
+
+                    mostrarMensagem(
+                        "A senha precisa possuir pelo menos 6 caracteres.",
+                        true
+                    );
+
+                    return;
+                }
+
+
+                if (!secret) {
+
+                    mostrarMensagem(
+                        "Informe o BOOTSTRAP_SECRET.",
+                        true
+                    );
+
+                    return;
+                }
+
+
+                /* ---------------------------------------------
+                   ALTERA BOTÃO
+                   --------------------------------------------- */
+
+                botao.disabled = true;
+                botao.textContent = "Criando administrador...";
+
+
+                try {
+
+                    console.log(
+                        "Chamando bootstrap-admin..."
+                    );
+
+
+                    /* -----------------------------------------
+                       CHAMA A EDGE FUNCTION
+                       ----------------------------------------- */
+
+                    const { data, error } =
+                        await sb.functions.invoke(
+                            "bootstrap-admin",
+                            {
+                                body: {
+                                    nome: nome,
+                                    cpf: cpf,
+                                    password: password,
+                                    secret: secret
+                                }
+                            }
+                        );
+
+
+                    console.log(
+                        "Resposta:",
+                        data
+                    );
+
+
+                    console.log(
+                        "Erro:",
+                        error
+                    );
+
+
+                    /* -----------------------------------------
+                       ERRO NA CHAMADA
+                       ----------------------------------------- */
+
+                    if (error) {
+
+                        let textoErro =
+                            error.message ||
+                            "Erro ao chamar a função bootstrap-admin.";
+
+
+                        /*
+                           Algumas respostas da Edge Function
+                           podem trazer detalhes no contexto.
+                        */
+
+                        try {
+
+                            if (error.context) {
+
+                                const resposta =
+                                    await error.context.json();
+
+                                if (resposta?.error) {
+                                    textoErro =
+                                        resposta.error;
+                                }
+
+                            }
+
+                        } catch (erroContexto) {
+
+                            console.log(
+                                "Não foi possível ler detalhes do erro:",
+                                erroContexto
+                            );
+
+                        }
+
+
+                        mostrarMensagem(
+                            textoErro,
+                            true
+                        );
+
+                        return;
+                    }
+
+
+                    /* -----------------------------------------
+                       ERRO RETORNADO PELA PRÓPRIA FUNÇÃO
+                       ----------------------------------------- */
+
+                    if (!data?.ok) {
+
+                        mostrarMensagem(
+                            data?.error ||
+                            "A função não conseguiu criar o administrador.",
+                            true
+                        );
+
+                        return;
+                    }
+
+
+                    /* -----------------------------------------
+                       SUCESSO
+                       ----------------------------------------- */
+
+                    mostrarMensagem(
+                        "Administrador criado com sucesso! Agora você poderá entrar pelo login administrativo."
+                    );
+
+
+                    /* Limpa informações sensíveis */
+
+                    document.getElementById("senha").value = "";
+                    document.getElementById("secret").value = "";
+
+
+                    /* Desabilita nova criação */
+
+                    botao.disabled = true;
+                    botao.textContent =
+                        "Administrador criado";
+
+                }
+
+                catch (erro) {
+
+                    console.error(
+                        "Erro inesperado:",
+                        erro
+                    );
+
+
+                    mostrarMensagem(
+                        "Erro inesperado: " +
+                        (erro?.message || String(erro)),
+                        true
+                    );
+
+                }
+
+                finally {
+
+                    /*
+                       Só reativa o botão se o administrador
+                       ainda não tiver sido criado.
+                    */
+
+                    if (
+                        botao.textContent !==
+                        "Administrador criado"
+                    ) {
+
+                        botao.disabled = false;
+                        botao.textContent =
+                            "Criar administrador";
+
+                    }
+
+                }
+
+            }
+        );
+
+
+        /* =====================================================
+           TESTE DE CARREGAMENTO
+           ===================================================== */
+
+        console.log(
+            "Setup Admin carregado."
+        );
+
+        console.log(
+            "Cliente Supabase:",
+            sb ? "OK" : "ERRO"
+        );
+
+    </script>
+
+</body>
+
+</html>

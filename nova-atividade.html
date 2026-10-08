@@ -1,0 +1,14 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nova Atividade | Projeto Coragem</title><link rel="stylesheet" href="styles.css"></head>
+<body data-role="admin" data-page="atividades" data-title="Atividades"><div class="shell"><div id="shellSidebar"></div><div class="main"><div id="shellTopbar"></div><main class="content">
+<div class="page-head"><div><div class="kicker">Conteúdo avaliativo</div><h2>Nova atividade</h2><p>Crie uma atividade de formação profissional com correção automática.</p></div><a class="btn btn-secondary" href="atividades.html">← Voltar</a></div><div id="message" class="message"></div>
+<form id="activityForm" class="card form-card">
+<div class="form-section"><h3>Informações da atividade</h3></div>
+<div class="field"><label>Título *</label><input id="titulo" required placeholder="Ex.: Comunicação profissional no ambiente de trabalho"></div>
+<div class="form-row"><div class="field"><label>Área *</label><select id="area" required><option value="">Selecione</option><option>Informática</option><option>Comunicação e Trabalho</option><option>Mercado de Trabalho</option><option>Departamento Pessoal</option><option>Educação Financeira</option><option>Cidadania</option><option>Ética e Responsabilidade</option><option>Saúde e Bem-estar</option><option>Projeto de Vida</option><option>Segurança no Trabalho</option><option>Outro</option></select></div><div class="field"><label>Tema</label><input id="tema" placeholder="Ex.: E-mail profissional"></div></div>
+<div class="form-row"><div class="field"><label>Turma</label><input id="turma" placeholder="Deixe vazio para todas"></div><div class="field"><label>Prazo</label><input id="prazo" type="datetime-local"></div></div>
+<div class="field"><label>Status</label><select id="status"><option>Publicada</option><option>Rascunho</option></select></div>
+<div class="field"><label>Descrição/orientações</label><textarea id="descricao"></textarea></div>
+<div class="form-section"><h3>Questões</h3><p>Use múltipla escolha, verdadeiro/falso ou resposta curta.</p></div><div id="questionsBuilder"></div>
+<div class="actions"><button id="addMultiple" class="btn btn-secondary" type="button">+ Múltipla escolha</button><button id="addVF" class="btn btn-secondary" type="button">+ V/F</button><button id="addShort" class="btn btn-secondary" type="button">+ Resposta curta</button></div>
+<div class="actions" style="margin-top:20px"><a href="atividades.html" class="btn btn-secondary">Cancelar</a><button class="btn btn-primary" type="submit">Salvar atividade</button></div></form>
+</main></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="supabase-config.js"></script><script src="core.js"></script></body></html>
