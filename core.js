@@ -3699,8 +3699,6 @@ function userForm() {
 
             'email',
 
-            'tipo',
-
             'role',
 
             'status',
@@ -4029,8 +4027,9 @@ function userForm() {
             const profileData = {
 
                 tipo:
-                    v('tipo') ||
-                    'Participante',
+                    v('role') === 'admin'
+                        ? 'Administrador'
+                        : 'Estudante',
 
                 nascimento:
                     v('nascimento'),
