@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Importar atividades | Projeto Coragem</title>
+<style>
+:root{font-family:system-ui,Segoe UI,Arial,sans-serif;color:#17253b;background:#f3f6fa}*{box-sizing:border-box}body{margin:0}main{max-width:1100px;margin:35px auto;padding:0 18px}header{display:flex;justify-content:space-between;align-items:center;gap:18px}h1{font-size:1.85rem;margin-bottom:6px}p{line-height:1.5}.muted{color:#5c6b7b}.card{background:white;border:1px solid #dbe2ea;border-radius:14px;padding:20px;margin:18px 0;box-shadow:0 3px 14px #11243c0a}.line{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.btn{cursor:pointer;background:#2156b5;border:0;border-radius:9px;padding:11px 15px;color:white;font-weight:650}.btn:disabled{cursor:not-allowed;opacity:.5}.secondary{background:#e8eef9;color:#16366d}.danger{background:#a03232}input[type=file],input[type=text],select{padding:11px;border:1px solid #b9c6d8;border-radius:9px;max-width:100%;font:inherit}.item{border-top:1px solid #e5ebf1;padding:15px 0}.item h3{margin:4px 0 8px}.tag{background:#e6eefc;border-radius:20px;padding:4px 10px;font-size:12px}.ok{color:#087046}.warn{color:#a45600}.error{color:#a12f2f}.mono{font-family:ui-monospace,monospace;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}.hide{display:none}label{font-size:.9rem}a{color:#2259b8}details{margin-top:10px}summary{cursor:pointer}textarea{width:100%;min-height:125px;border:1px solid #c7d0da;border-radius:8px;padding:10px}#log{max-height:280px;overflow:auto}
+</style></head><body><main>
+<header><div><h1>📥 Importar atividades e apostilas</h1><p class="muted">Projeto Coragem • Acesso administrativo • Importação em rascunho</p></div><a href="atividades-adm.html">Voltar ao painel</a></header>
+<section class="card"><h2>1. Escolha o arquivo</h2><p>A forma mais confiável para novembro é importar o arquivo <strong>novembro_2026_atividades.json</strong> incluído no pacote. Você também pode selecionar um Word (.docx) estruturado em atividades e questões com “Resposta:”.</p><div class="line"><input id="arquivo" type="file" accept=".json,.docx,application/json,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><button id="carregar" class="btn">Analisar arquivo</button></div><p class="muted">Documentos Word de outros meses podem exigir ajustes na separação. Sempre revise a prévia. Não carregue senhas ou dados pessoais nesta página.</p><p id="authMsg" class="muted">Conferindo seu acesso administrativo...</p></section>
+<section class="card hide" id="preview"><h2>2. Revise antes de importar</h2><p id="summary"></p><div class="line"><label>Turma (opcional) <input id="turma" type="text" placeholder="Deixe vazio para todas as turmas"></label><label><input type="checkbox" id="confirmar"> Conferi os títulos, as datas e as questões.</label></div><div id="items"></div><div class="line"><button id="importar" class="btn" disabled>Importar selecionadas como rascunho</button><button id="exportar" class="btn secondary">Exportar prévia em JSON</button></div></section>
+<section class="card hide" id="resultado"><h2>3. Resultado</h2><div id="log" class="mono"></div></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabase-config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.9.1/mammoth.browser.min.js"></script>
+<script>
+(()=>{'use strict';
+ const $=x=>document.getElementById(x),db=window.supabaseClient;let rows=[],canImport=false;
+ const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+ const norm=s=>String(s||'').trim();
+ const msg=(s,cls='')=>{const el=document.createElement('p');el.className=cls;el.textContent=s;$('log').append(el);};
+ function mark(){ $('importar').disabled=!canImport||!$('confirmar').checked||!rows.some((r,i)=>$('sel'+i)?.checked); }
+ async function checkAdmin(){if(!db){$('authMsg').textContent='ERRO: falta supabase-config.js ou window.supabaseClient.';return;}
+  const {data:{user},error}=await db.auth.getUser();if(error||!user){$('authMsg').textContent='Faça login como administrador na plataforma antes de importar.';return;}
+  const {data:p,error:e}=await db.from('profiles').select('role,status').eq('id',user.id).single();
+  if(e||p?.role!=='admin'||String(p.status||'').toLowerCase()==='inativo'){$('authMsg').textContent='Acesso negado: somente um administrador ativo pode importar.';return;}
+  canImport=true;$('authMsg').textContent='✓ Administrador autenticado. Os registros serão salvos em contents como Rascunho.';mark(); }
+ function validate(r){return r&&typeof r.id==='string'&&r.id.length<180&&r.tipo==='apostila'&&r.data&&typeof r.data.titulo==='string'&&Array.isArray(r.data.questoes)&&r.data.questoes.every(q=>q.tipo==='curta'&&q.enunciado&&q.respostaCorreta);}
+ function documentRows(text,filename){
+  const lines=text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  const dateHead=s=>/\b\d{2}\/\d{2}\/20\d{2}\s+(?:A|ATÉ)?\s*\d{2}\/\d{2}\/20\d{2}\b/i.test(s)||/^ATIVIDADE\s*\d+\s*[-–]?\s*\d{2}\/\d{2}\/20\d{2}/i.test(s)||/^\d{2}\/\d{2}\/20\d{2}\s+A\s+\d{2}\/\d{2}\/20\d{2}/.test(s);
+  let breaks=[];lines.forEach((l,i)=>{if(dateHead(l))breaks.push(i)});
+  if(!breaks.length)throw new Error('Nenhuma divisão de atividades identificada. Use o JSON preparado para novembro ou revise os títulos e datas do Word.');
+  breaks.push(lines.length);const out=[];
+  const dateISO=s=>{const m=s.match(/(\d{2})\/(\d{2})\/(20\d{2})/g)||[];return m.map(v=>{let [d,mo,y]=v.split('/');return `${y}-${mo}-${d}`})};
+  for(let k=0;k<breaks.length-1;k++){
+   const part=lines.slice(breaks[k],breaks[k+1]);let dates=dateISO(part[0]);
+   const titleLine=part.find((s,i)=>i>0&&i<4&&!/^tema\s*:/i.test(s)&&s.length>14)||('Atividade '+(k+1));
+   const title=(part.find(s=>/^tema\s*:/i.test(s))||titleLine).replace(/^tema\s*:\s*/i,'');
+   const qsStart=part.findIndex(s=>/^(?:questionário com perguntas|parte 2\s*[—-]\s*questões|parte 2\s*[—-]\s*20 questões|2\.\s*questões de compreensão)/i.test(s));
+   if(qsStart<0)throw new Error('Não encontrei o início das questões em "'+title+'". Revise o Word.');
+   const sub=part.slice(qsStart);let qs=[],question=null,writingAnswer=false,cut=sub.length;
+   for(let n=0;n<sub.length;n++){
+    const s=sub[n];if(/^v[ií]deos?\s+complem/i.test(s)||/^4\.\s*avaliação de múltipla/i.test(s)){cut=n;break;}
+    const q=s.match(/^(\d+)\.\s+(.+)/),scenario=s.match(/^Situação\s+(\d+)\s*[—-]\s*(.*)/i);
+    if(q||scenario){if(question&&question.respostaCorreta)qs.push(question);question={tipo:'curta',enunciado:q?q[2]:`Situação ${scenario[1]}: ${scenario[2]}`,alternativas:[],respostaCorreta:'',explicacao:'Resposta de referência. Revisão manual recomendada.',valor:1};writingAnswer=false;continue;}
+    if(/^Resposta(?:\s+esperada)?\s*:/i.test(s)){if(question){question.respostaCorreta=s.replace(/^Resposta(?:\s+esperada)?\s*:\s*/i,'');writingAnswer=true;}continue;}
+    if(question){if(writingAnswer)question.respostaCorreta+=' '+s;else question.enunciado+=' '+s;}
+   }
+   if(question&&question.respostaCorreta)qs.push(question);
+   if(!qs.length)throw new Error('Nenhuma questão com resposta reconhecida em '+title);
+   const links=part.filter(s=>/^https?:\/\//i.test(s));
+   const media=[];for(const link of links){const m=link.match(/(?:v=|youtu\.be\/)([A-Za-z0-9_-]{11})/);if(m)media.push({tipo:'video',fonte:'https://www.youtube.com/embed/'+m[1],legenda:'Vídeo complementar'});}
+   let inicio=dates[0]||'',fim=dates[1]||inicio;
+   const stamp=inicio||'sem-data';let id='pc-'+stamp+'-'+String(k+1).padStart(2,'0');
+   out.push({id,tipo:'apostila',status:'Rascunho',turma:'',data:{titulo:title,tema:title,disciplina:'Formação Profissional',prazo:fim,introducao:`Atividade ${k+1} • ${inicio} a ${fim}`,conteudo:part.slice(1,qsStart).join('\n\n')+(links.length?'\n\nVÍDEOS E LINKS COMPLEMENTARES\n'+links.join('\n'):''),reflexao:'',midias:media,questoes:qs,origemImportacao:filename,periodoInicio:inicio,periodoFim:fim}});
+  }
+  return out;
+ }
+ function show(){ $('preview').classList.remove('hide');$('summary').textContent=`${rows.length} conteúdo(s) identificados • ${rows.reduce((n,r)=>n+r.data.questoes.length,0)} questões com resposta de referência. Nenhum registro foi salvo ainda.`;
+  $('items').innerHTML=rows.map((r,i)=>`<div class="item"><div class="line"><label><input type="checkbox" id="sel${i}" checked> <strong>${escape(r.data.titulo)}</strong></label><span class="tag">${r.data.questoes.length} questões</span><span class="tag">Rascunho</span></div><p class="muted">${escape(r.data.periodoInicio||'')} a ${escape(r.data.periodoFim||'')} • ID ${escape(r.id)}</p><details><summary>Visualizar texto e primeiras questões</summary><p>${escape((r.data.conteudo||'').slice(0,700))}...</p>${r.data.questoes.slice(0,3).map(q=>`<p><b>${escape(q.enunciado)}</b><br><small>${escape(q.respostaCorreta)}</small></p>`).join('')}</details></div>`).join('');
+  rows.forEach((r,i)=>$('sel'+i).addEventListener('change',mark));mark();}
+ $('carregar').onclick=async()=>{try{const f=$('arquivo').files?.[0];if(!f)throw new Error('Selecione um arquivo .json ou .docx');
+  if(f.name.toLowerCase().endsWith('.json')){const obj=JSON.parse(await f.text());rows=Array.isArray(obj)?obj:obj.contents;}
+  else if(f.name.toLowerCase().endsWith('.docx')){if(!window.mammoth)throw new Error('Biblioteca Word não carregou. Conecte-se à internet ou use o JSON.');const extracted=await mammoth.extractRawText({arrayBuffer:await f.arrayBuffer()});rows=documentRows(extracted.value,f.name);}
+  else throw new Error('Formato não aceito.');if(!Array.isArray(rows)||!rows.length||!rows.every(validate))throw new Error('Formato inesperado ou questões sem resposta. Não foi feita nenhuma importação.');$('confirmar').checked=false;show();}
+  catch(e){alert('Erro na análise: '+e.message);}};
+ $('confirmar').onchange=mark;
+ $('exportar').onclick=()=>{const blob=new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='previa_atividades.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2500);};
+ $('importar').onclick=async()=>{if(!canImport||!$('confirmar').checked)return;const selected=rows.filter((r,i)=>$('sel'+i)?.checked);if(!selected.length)return;
+  if(!confirm(`Importar ${selected.length} apostilas como RASCUNHO? Registros com mesmo ID serão ignorados.`))return;
+  $('resultado').classList.remove('hide');$('log').textContent='';$('importar').disabled=true;let ok=0,skipped=0,failed=0;
+  for(const original of selected){const r=structuredClone(original);r.status='Rascunho';r.turma=$('turma').value.trim();
+   try{const {data:existing,error:checkError}=await db.from('contents').select('id').eq('id',r.id).maybeSingle();if(checkError)throw checkError;
+    if(existing){skipped++;msg('Ignorado (já existe): '+r.data.titulo,'warn');continue;}
+    const {error}=await db.from('contents').insert(r);if(error)throw error;ok++;msg('✓ Cadastrado: '+r.data.titulo,'ok');}
+   catch(e){failed++;msg('ERRO: '+r.data.titulo+' — '+e.message,'error');}
+  }
+  msg(`Concluído: ${ok} importados, ${skipped} já existentes, ${failed} falhas.`);mark();};
+ checkAdmin().catch(e=>{$('authMsg').textContent='Erro ao verificar autenticação: '+e.message;});
+})();
+</script></body></html>
