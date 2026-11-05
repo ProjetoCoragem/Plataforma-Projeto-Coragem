@@ -429,6 +429,31 @@ function youtubeEmbed(url) {
 }
 
 
+/* Incorporação permitida apenas em provedores conhecidos. */
+function approvedVideoEmbed(url) {
+    try {
+        const parsed = new URL(url);
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return '';
+        const host = parsed.hostname.toLowerCase();
+        if (host === 'youtu.be' || host === 'youtube.com' ||
+            host === 'www.youtube.com' || host === 'm.youtube.com' ||
+            host === 'www.youtube-nocookie.com' || host === 'youtube-nocookie.com') {
+            let id = '';
+            if (host === 'youtu.be') id = parsed.pathname.split('/')[1] || '';
+            else if (parsed.pathname.startsWith('/embed/') || parsed.pathname.startsWith('/shorts/') || parsed.pathname.startsWith('/live/'))
+                id = parsed.pathname.split('/')[2] || '';
+            else id = parsed.searchParams.get('v') || '';
+            return /^[A-Za-z0-9_-]{11}$/.test(id)
+                ? 'https://www.youtube-nocookie.com/embed/' + id : '';
+        }
+        if (host === 'vimeo.com' || host === 'www.vimeo.com' || host === 'player.vimeo.com') {
+            const match = parsed.pathname.match(/(?:\/video)?\/(\d+)(?:\/|$)/);
+            return match ? 'https://player.vimeo.com/video/' + match[1] : '';
+        }
+        return '';
+    } catch { return ''; }
+}
+
 /* =========================================================
    12. PERFIL / TIPO DE USUÁRIO
    ========================================================= */
@@ -5617,6 +5642,79 @@ function collectQuestions() {
 }
 
 
+/* Carrega os dados reais do registro antes da edição. */
+async function loadEditingContent(expectedType, form) {
+    const id = new URLSearchParams(location.search).get('id');
+    if (!id) return null;
+    const submit = form.querySelector('[type="submit"]');
+    let loaded = false;
+    if (submit) submit.disabled = true;
+    try {
+        const { data, error } = await supabase.from('contents')
+            .select('*').eq('id', id).single();
+        if (error) throw error;
+        if (!data || data.tipo !== expectedType) throw new Error('Conteúdo não encontrado ou tipo incorreto.');
+        const item = mapContent(data);
+        const title = document.getElementById('formTitle');
+        if (title) title.textContent = expectedType === 'apostila' ? 'Editar apostila' : 'Editar atividade';
+        for (const key of ['titulo', 'tema', 'turma', 'status', 'prazo', 'descricao', 'introducao', 'conteudo', 'reflexao']) {
+            const field = document.getElementById(key);
+            if (field && item[key] != null) field.value = String(item[key]);
+        }
+        const area = document.getElementById('area');
+        if (area && item.disciplina != null) area.value = item.disciplina;
+        if (expectedType === 'apostila') {
+            const medias = Array.isArray(item.midias) ? item.midias : [];
+            for (const [kind, urlId, labelId] of [
+                ['imagem', 'imagemUrl', 'imagemLegenda'],
+                ['video', 'videoUrl', 'videoLegenda']
+            ]) {
+                const existing = medias.find(m => m.tipo === kind);
+                if (existing) {
+                    const input = document.getElementById(urlId);
+                    const label = document.getElementById(labelId);
+                    if (input) input.value = existing.fonte || '';
+                    if (label) label.value = existing.legenda || '';
+                }
+            }
+        }
+        const builder = document.getElementById('questionsBuilder');
+        if (builder) {
+            builder.innerHTML = '';
+            const questions = Array.isArray(item.questoes) ? item.questoes : [];
+            for (const question of questions) {
+                const type = ['multipla', 'vf', 'curta'].includes(question.tipo) ? question.tipo : 'curta';
+                addQuestion('questionsBuilder', type);
+                const div = builder.lastElementChild;
+                div.querySelector('.q-text').value = question.enunciado || '';
+                div.querySelector('.q-explanation').value = question.explicacao || '';
+                div.querySelector('.q-value').value = question.valor ?? 1;
+                if (type === 'multipla') {
+                    const alternatives = Array.isArray(question.alternativas) ? question.alternativas : [];
+                    for (const option of div.querySelectorAll('.q-opt')) {
+                        const found = alternatives.find(a => String(a.letra).toUpperCase() === option.dataset.letter);
+                        option.value = found?.texto || '';
+                    }
+                    const selected = [...div.querySelectorAll('input[type="radio"]')]
+                        .find(r => r.value === String(question.respostaCorreta || '').toUpperCase());
+                    if (selected) selected.checked = true;
+                } else {
+                    div.querySelector('.q-correct').value = question.respostaCorreta || '';
+                }
+            }
+        }
+        loaded = true;
+        return data;
+    } catch (error) {
+        console.error('Falha ao carregar conteúdo para edição:', error);
+        msg('Não foi possível carregar o conteúdo para edição: ' + error.message, 'error');
+        // Não permitir que ausência de dados transforme uma edição em cadastro novo.
+        throw error;
+    } finally {
+        if (submit) submit.disabled = !loaded;
+    }
+}
+
 /* =========================================================
    54. FORMULÁRIO DE NOVA ATIVIDADE
    ========================================================= */
@@ -5632,6 +5730,16 @@ function activityForm() {
         return;
     }
 
+    const editingId = new URLSearchParams(location.search).get('id');
+    let originalRow = null;
+    let editReady = !editingId;
+    if (editingId) {
+        loadEditingContent('atividade', form).then(row => {
+            originalRow = row;
+            editReady = true;
+        }).catch(() => { editReady = false; });
+    }
+
 
     /*
        Coloca uma questão inicial
@@ -5645,6 +5753,7 @@ function activityForm() {
 
     if (
         builder &&
+        !editingId &&
         !builder.children.length
     ) {
 
@@ -5724,6 +5833,7 @@ function activityForm() {
 
 
             try {
+                if (!editReady) throw new Error('A edição ainda não carregou os dados originais.');
 
                 if (button) {
 
@@ -5736,8 +5846,7 @@ function activityForm() {
                 }
 
 
-                const id =
-                    uid('atividade');
+                const id = editingId || uid('atividade');
 
 
                 /*
@@ -5770,6 +5879,7 @@ function activityForm() {
                         v('turma'),
 
                     data: {
+                        ...(originalRow?.data || {}),
 
                         titulo:
                             v('titulo'),
@@ -5804,16 +5914,15 @@ function activityForm() {
                 }
 
 
-                const {
-                    error
-                } =
-                    await supabase
-                        .from(
-                            'contents'
-                        )
-                        .insert(
-                            row
-                        );
+                const query = supabase.from('contents');
+                const { data: saved, error } = editingId
+                    ? await query.update({
+                        status: row.status,
+                        turma: row.turma,
+                        data: row.data
+                      }).eq('id', editingId).select('id').single()
+                    : await query.insert(row).select('id').single();
+                if (!error && !saved) throw new Error('O banco não confirmou a gravação.');
 
 
                 if (error) {
@@ -5824,14 +5933,14 @@ function activityForm() {
 
 
                 msg(
-                    'Atividade salva com sucesso.'
+                    editingId ? 'Conteúdo atualizado com sucesso.' : 'Conteúdo criado com sucesso.'
                 );
 
 
-                form.reset();
+                if (!editingId) form.reset();
 
 
-                if (builder) {
+                if (builder && !editingId) {
 
                     builder.innerHTML =
                         '';
@@ -5897,6 +6006,16 @@ function apostilaForm() {
         return;
     }
 
+    const editingId = new URLSearchParams(location.search).get('id');
+    let originalRow = null;
+    let editReady = !editingId;
+    if (editingId) {
+        loadEditingContent('apostila', form).then(row => {
+            originalRow = row;
+            editReady = true;
+        }).catch(() => { editReady = false; });
+    }
+
 
     const builder =
         document.getElementById(
@@ -5906,6 +6025,7 @@ function apostilaForm() {
 
     if (
         builder &&
+        !editingId &&
         !builder.children.length
     ) {
 
@@ -5985,6 +6105,7 @@ function apostilaForm() {
 
 
             try {
+                if (!editReady) throw new Error('A edição ainda não carregou os dados originais.');
 
                 if (button) {
 
@@ -6036,11 +6157,7 @@ function apostilaForm() {
                             'video',
 
                         fonte:
-                            youtubeEmbed(
-                                v(
-                                    'videoUrl'
-                                )
-                            ),
+                            safeHref(v('videoUrl')),
 
                         legenda:
                             v(
@@ -6052,12 +6169,20 @@ function apostilaForm() {
                 }
 
 
+                // Preserva mídias adicionais que o formulário não edita.
+                if (originalRow?.data?.midias) {
+                    const originals = originalRow.data.midias;
+                    for (const kind of ['imagem', 'video']) {
+                        const same = originals.filter(m => m.tipo === kind);
+                        media.push(...same.slice(1));
+                    }
+                    media.push(...originals.filter(m => !['imagem', 'video'].includes(m.tipo)));
+                }
+
                 const row = {
 
                     id:
-                        uid(
-                            'apostila'
-                        ),
+                        editingId || uid('apostila'),
 
                     tipo:
                         'apostila',
@@ -6070,6 +6195,7 @@ function apostilaForm() {
                         v('turma'),
 
                     data: {
+                        ...(originalRow?.data || {}),
 
                         titulo:
                             v('titulo'),
@@ -6115,16 +6241,15 @@ function apostilaForm() {
                 }
 
 
-                const {
-                    error
-                } =
-                    await supabase
-                        .from(
-                            'contents'
-                        )
-                        .insert(
-                            row
-                        );
+                const query = supabase.from('contents');
+                const { data: saved, error } = editingId
+                    ? await query.update({
+                        status: row.status,
+                        turma: row.turma,
+                        data: row.data
+                      }).eq('id', editingId).select('id').single()
+                    : await query.insert(row).select('id').single();
+                if (!error && !saved) throw new Error('O banco não confirmou a gravação.');
 
 
                 if (error) {
@@ -6135,14 +6260,14 @@ function apostilaForm() {
 
 
                 msg(
-                    'Apostila salva com sucesso.'
+                    editingId ? 'Conteúdo atualizado com sucesso.' : 'Conteúdo criado com sucesso.'
                 );
 
 
-                form.reset();
+                if (!editingId) form.reset();
 
 
-                if (builder) {
+                if (builder && !editingId) {
 
                     builder.innerHTML =
                         '';
@@ -7470,12 +7595,29 @@ function mediaHtml(media) {
     }
 
 
+    // Somente provedores reconhecidos podem carregar em iframe.
+    // Outros endereços são links externos (evita bloqueios X-Frame-Options/CSP).
+    const embedded = approvedVideoEmbed(source);
+    if (!embedded) {
+        return `
+            <div class="media-box">
+                <p><strong>${esc(media.legenda || 'Vídeo complementar')}</strong></p>
+                <a class="btn btn-primary" href="${esc(source)}"
+                   target="_blank" rel="noopener noreferrer">
+                    ▶ Assistir ao vídeo na página original
+                </a>
+            </div>
+        `;
+    }
+
     return `
 
         <div class="media-box">
 
             <iframe
-                src="${esc(source)}"
+                src="${esc(embedded)}"
+                title="${esc(media.legenda || 'Vídeo complementar')}"
+                referrerpolicy="strict-origin-when-cross-origin"
                 height="420"
                 allowfullscreen
                 loading="lazy"
