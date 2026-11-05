@@ -5642,76 +5642,130 @@ function collectQuestions() {
 }
 
 
-/* Carrega os dados reais do registro antes da edição. */
+/* EDIÇÃO CONFIÁVEL: dados sempre recuperados e verificados antes de salvar. */
 async function loadEditingContent(expectedType, form) {
     const id = new URLSearchParams(location.search).get('id');
     if (!id) return null;
+
     const submit = form.querySelector('[type="submit"]');
+    if (submit) {
+        submit.disabled = true;
+        submit.dataset.editLoading = 'true';
+    }
+
+    let note = document.getElementById('editingLoadStatus');
+    if (!note) {
+        note = document.createElement('div');
+        note.id = 'editingLoadStatus';
+        note.setAttribute('role', 'status');
+        note.style.cssText = 'padding:12px;margin:12px 0;border:1px solid #cbd5e1;border-radius:8px;white-space:pre-wrap';
+        form.prepend(note);
+    }
+    note.textContent = 'Carregando conteúdo original para edição…';
     let loaded = false;
-    if (submit) submit.disabled = true;
     try {
-        const { data, error } = await supabase.from('contents')
-            .select('*').eq('id', id).single();
+        const { data: record, error } = await supabase
+            .from('contents').select('*').eq('id', id).maybeSingle();
         if (error) throw error;
-        if (!data || data.tipo !== expectedType) throw new Error('Conteúdo não encontrado ou tipo incorreto.');
-        const item = mapContent(data);
+        if (!record) throw new Error('Não foi encontrado nenhum registro com este ID no Supabase: ' + id);
+        if (record.tipo !== expectedType) {
+            throw new Error('Tipo inesperado: ' + record.tipo + '. Esperado: ' + expectedType);
+        }
+        const raw = record.data && typeof record.data === 'object'
+            ? record.data
+            : (typeof record.data === 'string' ? JSON.parse(record.data) : {});
+        const item = { ...raw, status: record.status, turma: record.turma };
         const title = document.getElementById('formTitle');
         if (title) title.textContent = expectedType === 'apostila' ? 'Editar apostila' : 'Editar atividade';
-        for (const key of ['titulo', 'tema', 'turma', 'status', 'prazo', 'descricao', 'introducao', 'conteudo', 'reflexao']) {
+
+        const sourceValues = {
+            titulo: item.titulo ?? item.title,
+            tema: item.tema ?? item.assunto,
+            turma: item.turma,
+            status: item.status,
+            prazo: item.prazo,
+            descricao: item.descricao ?? item.descrição,
+            introducao: item.introducao,
+            conteudo: item.conteudo ?? item.texto,
+            reflexao: item.reflexao,
+            area: item.disciplina ?? item.area
+        };
+        for (const [key, value] of Object.entries(sourceValues)) {
             const field = document.getElementById(key);
-            if (field && item[key] != null) field.value = String(item[key]);
+            if (field && value != null) {
+                field.value = String(value);
+                if (field.tagName === 'SELECT' && field.value !== String(value)) {
+                    console.warn('Campo com opção inexistente no formulário:', key, value);
+                }
+                field.dispatchEvent(new Event('change', { bubbles: true }));
+            }
         }
-        const area = document.getElementById('area');
-        if (area && item.disciplina != null) area.value = item.disciplina;
         if (expectedType === 'apostila') {
             const medias = Array.isArray(item.midias) ? item.midias : [];
             for (const [kind, urlId, labelId] of [
                 ['imagem', 'imagemUrl', 'imagemLegenda'],
                 ['video', 'videoUrl', 'videoLegenda']
             ]) {
-                const existing = medias.find(m => m.tipo === kind);
-                if (existing) {
-                    const input = document.getElementById(urlId);
-                    const label = document.getElementById(labelId);
-                    if (input) input.value = existing.fonte || '';
-                    if (label) label.value = existing.legenda || '';
-                }
+                const media = medias.find(m => m.tipo === kind);
+                const urlField = document.getElementById(urlId);
+                const labelField = document.getElementById(labelId);
+                if (urlField) urlField.value = media?.fonte ?? item[urlId] ?? '';
+                if (labelField) labelField.value = media?.legenda ?? item[labelId] ?? '';
             }
         }
+
         const builder = document.getElementById('questionsBuilder');
+        const questions = Array.isArray(item.questoes) ? item.questoes
+            : (Array.isArray(item.questions) ? item.questions : []);
+        if (questions.length && !builder) {
+            throw new Error('O HTML desta página não possui #questionsBuilder. As questões não podem ser editadas com segurança.');
+        }
         if (builder) {
             builder.innerHTML = '';
-            const questions = Array.isArray(item.questoes) ? item.questoes : [];
             for (const question of questions) {
-                const type = ['multipla', 'vf', 'curta'].includes(question.tipo) ? question.tipo : 'curta';
+                const type = ['multipla','vf','curta'].includes(question.tipo) ? question.tipo : 'curta';
                 addQuestion('questionsBuilder', type);
                 const div = builder.lastElementChild;
-                div.querySelector('.q-text').value = question.enunciado || '';
-                div.querySelector('.q-explanation').value = question.explicacao || '';
+                if (!div || !div.classList.contains('question-builder')) {
+                    throw new Error('Falha ao criar o formulário de uma questão.');
+                }
+                div.querySelector('.q-text').value = question.enunciado ?? question.pergunta ?? '';
+                div.querySelector('.q-explanation').value = question.explicacao ?? '';
                 div.querySelector('.q-value').value = question.valor ?? 1;
+                const answer = String(question.respostaCorreta ?? question.resposta ?? '');
                 if (type === 'multipla') {
                     const alternatives = Array.isArray(question.alternativas) ? question.alternativas : [];
                     for (const option of div.querySelectorAll('.q-opt')) {
                         const found = alternatives.find(a => String(a.letra).toUpperCase() === option.dataset.letter);
-                        option.value = found?.texto || '';
+                        option.value = found?.texto ?? '';
                     }
                     const selected = [...div.querySelectorAll('input[type="radio"]')]
-                        .find(r => r.value === String(question.respostaCorreta || '').toUpperCase());
+                        .find(r => r.value === answer.toUpperCase());
                     if (selected) selected.checked = true;
                 } else {
-                    div.querySelector('.q-correct').value = question.respostaCorreta || '';
+                    const answerInput = div.querySelector('.q-correct');
+                    if (answerInput) answerInput.value = answer;
                 }
             }
+            if (builder.querySelectorAll('.question-builder').length !== questions.length) {
+                throw new Error('Nem todas as questões foram restauradas. Salvamento bloqueado para proteger os dados.');
+            }
         }
+        note.textContent = 'Editando: ' + (sourceValues.titulo || id) + ' — ' + questions.length + ' questão(ões) recuperada(s).';
+        note.style.borderColor = '#16a34a';
         loaded = true;
-        return data;
+        return record;
     } catch (error) {
-        console.error('Falha ao carregar conteúdo para edição:', error);
-        msg('Não foi possível carregar o conteúdo para edição: ' + error.message, 'error');
-        // Não permitir que ausência de dados transforme uma edição em cadastro novo.
+        console.error('Erro detalhado de edição de conteúdo:', { id, expectedType, error });
+        note.textContent = 'ERRO AO ABRIR EDIÇÃO: ' + (error.message || String(error)) + '\nNenhuma alteração poderá ser salva até resolver este erro.';
+        note.style.borderColor = '#dc2626';
+        msg('Falha ao carregar o conteúdo original: ' + (error.message || String(error)), 'error');
         throw error;
     } finally {
-        if (submit) submit.disabled = !loaded;
+        if (submit) {
+            submit.disabled = !loaded;
+            delete submit.dataset.editLoading;
+        }
     }
 }
 
@@ -5833,7 +5887,7 @@ function activityForm() {
 
 
             try {
-                if (!editReady) throw new Error('A edição ainda não carregou os dados originais.');
+                if (!editReady || (editingId && !originalRow)) throw new Error('O conteúdo original não foi carregado. Não é seguro salvar esta edição.');
 
                 if (button) {
 
@@ -6105,7 +6159,7 @@ function apostilaForm() {
 
 
             try {
-                if (!editReady) throw new Error('A edição ainda não carregou os dados originais.');
+                if (!editReady || (editingId && !originalRow)) throw new Error('O conteúdo original não foi carregado. Não é seguro salvar esta edição.');
 
                 if (button) {
 
